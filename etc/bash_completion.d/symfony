@@ -1,0 +1,68 @@
+_symfony()
+{            
+  local cur prev action namespace command task
+  COMPREPLY=()
+  cur=${COMP_WORDS[COMP_CWORD]}
+  prev=${COMP_WORDS[COMP_CWORD-1]}
+  command=${COMP_WORDS[0]}
+  namespace=${COMP_WORDS[1]}
+  task=${COMP_WORDS[3]}
+
+  # we create a cache file in the data directory if none exists
+  # and update it if it's not from today
+  #
+  # you will need to manually delete this cache file
+  # if you want to reflect more recent changes to the tasks
+
+  CACHEFILE="$(dirname $(which $command))/data/tasks.txt";
+  if [ ! -f "$CACHEFILE" ] || [ "$(stat -c %y $CACHEFILE | cut -d ' ' -f 1)" != "$(date +%F)" ]; then
+    ${COMP_WORDS[0]} | perl -ne 'if( /^([a-zA-Z0-9\-]+)/ ) { $first = $1; } elsif ( /^\s*(:[a-zA-Z0-9\-]+)/ ) { print $first . $1 . "\n"; }' > $CACHEFILE
+  fi
+
+  case "${#COMP_WORDS[@]}" in
+    2)
+      # 2 completion words - we are looking for a namespace
+
+      OLD_IFS=$IFS
+      IFS=$'\n'
+      COMPREPLY=( $( compgen -W "$(cat $CACHEFILE)" -- $cur ) )
+      IFS=$OLD_IFS
+    ;;    
+
+    3|4)
+      # 3 or 4 completion words - we are looking for a task
+      # within the current namespace
+      # (bash treats the colon as a new completion word)
+
+      COMPREPLY=( $( compgen -W "$(
+        for line in $(cat $CACHEFILE); do
+          TASK=${line##*:};
+          [ x${line%":$TASK"} == x$namespace ] && echo $TASK
+        done
+      )" -- ${cur#":"} ) )
+
+    ;;
+
+    *)
+      # 5 or more completion words - for the moment
+      # we just get the available options from the usage string
+
+      COMPREPLY=( $( compgen -o nospace -W "$(
+        for line in $($command help $namespace:$task); do
+          [ ${line} == 'Arguments:' ] && break;
+          if [ ${line} != 'Usage:' ]; then
+            line=${line#'symfony'};
+            line=${line#"$namespace:$task"};
+            echo $line | sed 's/[][\.]//g'
+          fi
+        done
+      )" -- $cur ) )
+      [ "${COMPREPLY[0]: -1:1}" == '=' ] && compopt -o nospace;
+    ;;
+  esac
+
+  return 0
+}
+
+complete -F _symfony symfony
+
