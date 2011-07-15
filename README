@@ -1,0 +1,5 @@
+Installation
+============
+
+Copy etc/bash_completion.d/symfony to the appropriate location in your system.
+Depending on your distribution, this could be /etc/bash_completion.d/ for global availability or ~/.bash_completion.d/ if you only want to enable it for your user.
