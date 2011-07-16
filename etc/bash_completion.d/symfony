@@ -7,6 +7,12 @@ _symfony()
   command=${COMP_WORDS[0]}
   namespace=${COMP_WORDS[1]}
   task=${COMP_WORDS[3]}
+  count=${#COMP_WORDS[@]}
+  if [ x$namespace == 'xhelp' ]; then
+    namespace=${COMP_WORDS[2]};
+    task=${COMP_WORDS[4]};
+    count=$(($count-1));
+  fi
 
   # we create a cache file in the data directory if none exists
   # and update it if it's not from today
@@ -16,11 +22,11 @@ _symfony()
 
   CACHEFILE="$(dirname $(which $command))/data/tasks.txt";
   if [ ! -f "$CACHEFILE" ] || [ "$(stat -c %y $CACHEFILE | cut -d ' ' -f 1)" != "$(date +%F)" ]; then
-    ${COMP_WORDS[0]} | perl -ne 'if( /^([a-zA-Z0-9\-]+)/ ) { $first = $1; } elsif ( /^\s*(:[a-zA-Z0-9\-]+)/ ) { print $first . $1 . "\n"; }' > $CACHEFILE
+    ${COMP_WORDS[0]} | perl -ne 'if ( /^Available/ ) { $first = ""; } elsif ( /^([a-zA-Z0-9\-]+)/ ) { $first = $1; } elsif ( /^\s*:([a-zA-Z0-9\-]+)/ ) { print $first . (($first) ? ":" : "").$1 . "\n"; }' > $CACHEFILE
   fi
 
-  case "${#COMP_WORDS[@]}" in
-    2)
+  case $count in
+    1|2)
       # 2 completion words - we are looking for a namespace
 
       OLD_IFS=$IFS
@@ -34,30 +40,45 @@ _symfony()
       # within the current namespace
       # (bash treats the colon as a new completion word)
 
-      COMPREPLY=( $( compgen -W "$(
-        for line in $(cat $CACHEFILE); do
-          TASK=${line##*:};
-          [ x${line%":$TASK"} == x$namespace ] && echo $TASK
-        done
-      )" -- ${cur#":"} ) )
-
+      case $prev in
+        'list')
+        ;;
+        'help')
+          OLD_IFS=$IFS
+          IFS=$'\n'
+          COMPREPLY=( $( compgen -W "$(cat $CACHEFILE)" -- $cur ) )
+          IFS=$OLD_IFS
+        ;;
+        *)
+          COMPREPLY=( $( compgen -W "$(
+            for line in $(cat $CACHEFILE); do
+              TASK=${line##*:};
+              [ x${line%":$TASK"} == x$namespace ] && echo $TASK
+            done
+          )" -- ${cur#":"} ) )
+        ;;
+      esac
     ;;
 
     *)
       # 5 or more completion words - for the moment
       # we just get the available options from the usage string
 
-      COMPREPLY=( $( compgen -o nospace -W "$(
-        for line in $($command help $namespace:$task); do
-          [ ${line} == 'Arguments:' ] && break;
-          if [ ${line} != 'Usage:' ]; then
-            line=${line#'symfony'};
-            line=${line#"$namespace:$task"};
-            echo $line | sed 's/[][\.]//g'
-          fi
-        done
-      )" -- $cur ) )
-      [ "${COMPREPLY[0]: -1:1}" == '=' ] && compopt -o nospace;
+      if [ x${COMP_WORDS[1]} == x'help' ]; then
+        compopt -o nospace;
+      else
+        COMPREPLY=( $( compgen -W "$(
+          for line in $($command help $namespace:$task); do
+            [ ${line} == 'Arguments:' ] && break;
+            if [ ${line} != 'Usage:' ]; then
+              line=${line#'symfony'};
+              line=${line#"$namespace:$task"};
+              echo $line | sed 's/[][\.]//g'
+            fi
+          done
+        )" -- $cur ) )
+        [ "${COMPREPLY[0]: -1:1}" == '=' ] && compopt -o nospace;
+      fi
     ;;
   esac
 
