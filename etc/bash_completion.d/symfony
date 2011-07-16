@@ -8,6 +8,7 @@ _symfony()
   namespace=${COMP_WORDS[1]}
   task=${COMP_WORDS[3]}
   count=${#COMP_WORDS[@]}
+  [ $count -gt 2 ] && befprev=${COMP_WORDS[COMP_CWORD-2]}
   if [ x$namespace == 'xhelp' ]; then
     namespace=${COMP_WORDS[2]};
     task=${COMP_WORDS[4]};
@@ -61,23 +62,41 @@ _symfony()
     ;;
 
     *)
-      # 5 or more completion words - for the moment
-      # we just get the available options from the usage string
+      # 5 or more completion words
+      # if in help mode, bail out
+      # if previous is '=' set previous to the one before
+      # if we have a well known option, try to suggest possible values
+      # otherwise, parse usage string to suggest available options
 
       if [ x${COMP_WORDS[1]} == x'help' ]; then
         compopt -o nospace;
       else
-        COMPREPLY=( $( compgen -W "$(
-          for line in $($command help $namespace:$task); do
-            [ ${line} == 'Arguments:' ] && break;
-            if [ ${line} != 'Usage:' ]; then
-              line=${line#'symfony'};
-              line=${line#"$namespace:$task"};
-              echo $line | sed 's/[][\.]//g'
-            fi
-          done
-        )" -- $cur ) )
-        [ "${COMPREPLY[0]: -1:1}" == '=' ] && compopt -o nospace;
+        [ x$prev == 'x=' ] && prev=$befprev;
+        case $prev in
+          '--env')
+            COMPREPLY=( $( compgen -W "dev prod qa test" -- ${cur#'='} ) );
+          ;;
+          '--application')
+            COMPREPLY=( $( compgen -W "$(
+              for app in $(ls $(dirname $(which $command))/apps); do
+                echo $app ;
+              done
+            )" -- ${cur#'='} ) );
+          ;;
+          *)
+            COMPREPLY=( $( compgen -W "$(
+              for line in $($command help $namespace:$task); do
+                [ ${line} == 'Arguments:' ] && break;
+                if [ ${line} != 'Usage:' ]; then
+                  line=${line#'symfony'};
+                  line=${line#"$namespace:$task"};
+                  echo $line | sed 's/[][\.]//g'
+                fi
+              done
+            )" -- $cur ) )
+            [ "${COMPREPLY[0]: -1:1}" == '=' ] && compopt -o nospace;
+          ;;
+        esac
       fi
     ;;
   esac
