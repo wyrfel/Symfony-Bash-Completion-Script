@@ -33,7 +33,7 @@ _symfony()
 
       OLD_IFS=$IFS
       IFS=$'\n'
-      COMPREPLY=( $( compgen -W "$(cat $CACHEFILE)" -- $cur ) )
+      COMPREPLY=( $( compgen -W "$(cat $CACHEFILE | cut -d ' ' -f 1)" -- $cur ) )
       IFS=$OLD_IFS
     ;;    
 
