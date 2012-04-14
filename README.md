@@ -4,6 +4,7 @@ Overview
 This is a simple Symfony bash completion script designed to work with Symfony 1.4.
 
 Inspiration and some code have been borrowed from:
+
 * https://github.com/biko2/symfony_complete
 * http://trac.symfony-project.org/wiki/BashCompletion
 
