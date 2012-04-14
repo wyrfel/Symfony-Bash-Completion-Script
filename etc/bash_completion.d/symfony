@@ -8,21 +8,22 @@ _symfony()
   namespace=${COMP_WORDS[1]}
   task=${COMP_WORDS[3]}
   count=${#COMP_WORDS[@]}
-  [ $count -gt 2 ] && befprev=${COMP_WORDS[COMP_CWORD-2]}
-  if [ x$namespace == 'xhelp' ]; then
+  [[ $count -gt 2 ]] && befprev=${COMP_WORDS[COMP_CWORD-2]}
+  if [[ x$namespace == 'xhelp' ]]; then
     namespace=${COMP_WORDS[2]};
     task=${COMP_WORDS[4]};
     count=$(($count-1));
   fi
 
-  # we create a cache file in the data directory if none exists
+  CACHEFILE="$(dirname $(which $command))/cache/tasks.cpl";
+
+  # we create a cache file in the cache directory if none exists
   # and update it if it's not from today
   #
   # you will need to manually delete this cache file
   # if you want to reflect more recent changes to the tasks
 
-  CACHEFILE="$(dirname $(which $command))/data/tasks.txt";
-  if [ ! -f "$CACHEFILE" ] || [ "$(stat -c %y $CACHEFILE | cut -d ' ' -f 1)" != "$(date +%F)" ]; then
+  if [[ ! -f "$CACHEFILE" ]] || [[ "$(date -d "$(stat -c %y $CACHEFILE)" +%W)" != "$(date +%W)" ]]; then
     ${COMP_WORDS[0]} | perl -ne 'if ( /^Available/ ) { $first = ""; } elsif ( /^([a-zA-Z0-9\-]+)/ ) { $first = $1; } elsif ( /^\s*:([a-zA-Z0-9\-]+)/ ) { print $first . (($first) ? ":" : "").$1 . "\n"; }' > $CACHEFILE
   fi
 
@@ -47,14 +48,14 @@ _symfony()
         'help')
           OLD_IFS=$IFS
           IFS=$'\n'
-          COMPREPLY=( $( compgen -W "$(cat $CACHEFILE)" -- $cur ) )
+          COMPREPLY=( $( compgen -W "$(cat $CACHEFILE | cut -d ' ' -f 1)" -- $cur ) )
           IFS=$OLD_IFS
         ;;
         *)
           COMPREPLY=( $( compgen -W "$(
             for line in $(cat $CACHEFILE); do
               TASK=${line##*:};
-              [ x${line%":$TASK"} == x$namespace ] && echo $TASK
+              [[ x${line%":$TASK"} == x$namespace ]] && echo $TASK
             done
           )" -- ${cur#":"} ) )
         ;;
@@ -68,10 +69,10 @@ _symfony()
       # if we have a well known option, try to suggest possible values
       # otherwise, parse usage string to suggest available options
 
-      if [ x${COMP_WORDS[1]} == x'help' ]; then
+      if [[ x${COMP_WORDS[1]} == x'help' ]]; then
         compopt -o nospace;
       else
-        [ x$prev == 'x=' ] && prev=$befprev;
+        [[ x$prev == 'x=' ]] && prev=$befprev;
         case $prev in
           '--env')
             COMPREPLY=( $( compgen -W "dev prod qa test" -- ${cur#'='} ) );
@@ -83,18 +84,41 @@ _symfony()
               done
             )" -- ${cur#'='} ) );
           ;;
+	  '--connection')
+	    COMPREPLY=( $( compgen -W "$(
+              for c in $(cat config/databases.yml | grep -i "^  [a-z0-9]\+:" | uniq); do
+	        echo ${c:0: -1}
+	      done
+            )" -- ${cur#'='} ) )
+	  ;;
           *)
-            COMPREPLY=( $( compgen -W "$(
-              for line in $($command help $namespace:$task); do
-                [ ${line} == 'Arguments:' ] && break;
-                if [ ${line} != 'Usage:' ]; then
-                  line=${line#'symfony'};
-                  line=${line#"$namespace:$task"};
-                  echo $line | sed 's/[][\.]//g'
-                fi
-              done
-            )" -- $cur ) )
-            [ "${COMPREPLY[0]: -1:1}" == '=' ] && compopt -o nospace;
+	    TASK="${COMP_WORDS[1]}:${COMP_WORDS[3]}"
+	    line="$(cat $CACHEFILE | grep $TASK)"
+	    if [[ -z $line ]]; then
+	      line = $TASK
+	      (cat $CACHEFILE; echo $line) > $CACHEFILE
+            fi
+            args="${line#$TASK}"
+	    if [[ -z $args ]]; then
+              args="$(
+                for line in $($command help $namespace:$task); do
+                  [[ ${line} == 'Arguments:' ]] && break;
+                  if [[ ${line} != 'Usage:' ]]; then
+                    line=${line#'symfony'};
+                    line=${line#"$namespace:$task"};
+                    echo -n "$line " | sed 's/[][\.]//g'
+                  fi
+                done
+              )"
+              sed -i -e "s/$TASK/$TASK $args/" $CACHEFILE
+	    fi
+	    COMPREPLY=( $( compgen -W "$args" -- $cur ) )
+	    if [[ ${#COMPREPLY[@]} -gt 0 ]]; then
+              [[ "${COMPREPLY[0]: -1:1}" == '=' ]] && compopt -o nospace;
+	    else
+	      COMPREPLY=( $( compgen -f -- ${cur#'='} ) )
+	      compopt -o filenames
+	    fi
           ;;
         esac
       fi
